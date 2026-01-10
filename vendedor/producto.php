@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'update_
   $description = trim((string)($_POST['description'] ?? ''));
 
   if (!$title) $err = "Falta título.";
+  elseif ($sku !== '' && !preg_match('/^\d{8,14}$/', $sku)) $err = "El código universal debe tener entre 8 y 14 números.";
   else {
     $pdo->prepare("UPDATE store_products SET title=?, sku=?, description=? WHERE id=? AND store_id=?")
         ->execute([$title, $sku?:null, $description?:null, $productId, $storeId]);
@@ -87,7 +88,7 @@ echo "<h3>Editar producto</h3>
 <input type='hidden' name='csrf' value='".h(csrf_token())."'>
 <input type='hidden' name='action' value='update_info'>
 <p>Título: <input name='title' value='".h($product['title'])."' style='width:520px'></p>
-<p>SKU: <input name='sku' value='".h((string)($product['sku']??''))."' style='width:220px'></p>
+<p>Código universal (8-14 dígitos): <input name='sku' value='".h((string)($product['sku']??''))."' style='width:220px'></p>
 <p>Descripción:<br><textarea name='description' rows='4' style='width:90%'>".h((string)($product['description']??''))."</textarea></p>
 <button>Guardar cambios</button>
 </form><hr>";

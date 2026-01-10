@@ -32,12 +32,13 @@ $providerProducts = $pdo->query("
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'create') {
   $title = trim((string)($_POST['title'] ?? ''));
   $sku = trim((string)($_POST['sku'] ?? ''));
+  $universalCode = trim((string)($_POST['universal_code'] ?? ''));
   if (!$title) $err="Falta título.";
-  elseif ($sku !== '' && !preg_match('/^\d{8,14}$/', $sku)) $err = "El código universal debe tener entre 8 y 14 números.";
+  elseif ($universalCode !== '' && !preg_match('/^\d{8,14}$/', $universalCode)) $err = "El código universal debe tener entre 8 y 14 números.";
   else {
-    $pdo->prepare("INSERT INTO store_products(store_id,title,sku,description,status,own_stock_qty,own_stock_price,manual_price)
-                   VALUES(?,?,?,?, 'active',0,NULL,NULL)")
-        ->execute([$storeId,$title,$sku?:null,($_POST['description']??'')?:null]);
+    $pdo->prepare("INSERT INTO store_products(store_id,title,sku,universal_code,description,status,own_stock_qty,own_stock_price,manual_price)
+                   VALUES(?,?,?,?,?, 'active',0,NULL,NULL)")
+        ->execute([$storeId,$title,$sku?:null,$universalCode?:null,($_POST['description']??'')?:null]);
     $msg="Producto creado.";
   }
 }
@@ -46,14 +47,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'copy') 
   $ppId = (int)($_POST['provider_product_id'] ?? 0);
   if (!$ppId) $err="Elegí un producto de proveedor.";
   else {
-    $pp = $pdo->prepare("SELECT title, description, sku FROM provider_products WHERE id=? AND status='active'");
+    $pp = $pdo->prepare("SELECT title, description, sku, universal_code FROM provider_products WHERE id=? AND status='active'");
     $pp->execute([$ppId]);
     $row = $pp->fetch();
     if (!$row) $err="Producto proveedor inválido.";
     else {
-      $pdo->prepare("INSERT INTO store_products(store_id,title,sku,description,status,own_stock_qty,own_stock_price,manual_price)
-                     VALUES(?,?,?,?, 'active',0,NULL,NULL)")
-          ->execute([$storeId,$row['title'],$row['sku']??null,$row['description']??null]);
+      $pdo->prepare("INSERT INTO store_products(store_id,title,sku,universal_code,description,status,own_stock_qty,own_stock_price,manual_price)
+                     VALUES(?,?,?,?,?, 'active',0,NULL,NULL)")
+          ->execute([$storeId,$row['title'],$row['sku']??null,$row['universal_code']??null,$row['description']??null]);
       $spId = (int)$pdo->lastInsertId();
       $pdo->prepare("INSERT IGNORE INTO store_product_sources(store_product_id,provider_product_id,enabled) VALUES(?,?,1)")
           ->execute([$spId,$ppId]);
@@ -84,7 +85,8 @@ echo "<h3>Crear desde cero</h3>
 <input type='hidden' name='csrf' value='".h(csrf_token())."'>
 <input type='hidden' name='action' value='create'>
 <p>Título: <input name='title' style='width:520px'></p>
-<p>Código universal (8-14 dígitos): <input name='sku' style='width:220px'></p>
+<p>SKU: <input name='sku' style='width:220px'></p>
+<p>Código universal (8-14 dígitos): <input name='universal_code' style='width:220px'></p>
 <p>Descripción:<br><textarea name='description' rows='3' style='width:90%'></textarea></p>
 <button>Crear</button>
 </form><hr>";
@@ -105,7 +107,7 @@ echo "<h3>Listado</h3>";
 if (!$storeProducts) { echo "<p>Sin productos.</p>"; page_footer(); exit; }
 
 echo "<table border='1' cellpadding='6' cellspacing='0'>
-<tr><th>ID</th><th>Título</th><th>Código universal</th><th>Stock prov</th><th>Own qty</th><th>Own $</th><th>Manual $</th><th>Precio actual</th></tr>";
+<tr><th>ID</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock prov</th><th>Own qty</th><th>Own $</th><th>Manual $</th><th>Precio actual</th></tr>";
 foreach($storeProducts as $sp){
   $provStock = provider_stock_sum($pdo, (int)$sp['id']);
   $sell = current_sell_price($pdo, $currentStore, $sp);
@@ -117,6 +119,7 @@ foreach($storeProducts as $sp){
     <td>".h((string)$sp['id'])."</td>
     <td><a href='".$editUrl."'>".h($sp['title'])."</a></td>
     <td>".h($sp['sku']??'')."</td>
+    <td>".h($sp['universal_code']??'')."</td>
     <td>".h((string)$provStock)."</td>
     <td>".h((string)$sp['own_stock_qty'])."</td>
     <td>".h((string)($sp['own_stock_price']??''))."</td>

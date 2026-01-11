@@ -48,7 +48,7 @@ $params[] = $q;
 $params[] = $prefix;
 
 $sql = "
-  SELECT pp.id, pp.title, pp.sku, p.display_name AS provider_name,
+  SELECT pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name AS provider_name,
          COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) AS stock
   FROM provider_products pp
   JOIN providers p ON p.id=pp.provider_id
@@ -59,7 +59,7 @@ $sql = "
     AND sps.id IS NULL
     AND (pp.title LIKE ? OR pp.sku LIKE ? OR pp.universal_code LIKE ?)
     {$providerFilter}
-  GROUP BY pp.id, pp.title, pp.sku, p.display_name
+  GROUP BY pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name
   HAVING stock > 0
   ORDER BY (pp.title = ?) DESC,
            (pp.title LIKE ?) DESC,
@@ -77,6 +77,8 @@ foreach ($items as $item) {
     'id' => (int)$item['id'],
     'title' => (string)$item['title'],
     'sku' => (string)($item['sku'] ?? ''),
+    'universal_code' => (string)($item['universal_code'] ?? ''),
+    'price' => $item['base_price'] !== null ? (float)$item['base_price'] : null,
     'provider_name' => (string)($item['provider_name'] ?? ''),
     'stock' => (int)$item['stock'],
   ];

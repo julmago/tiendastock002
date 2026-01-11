@@ -125,14 +125,15 @@ Manual $ <input name='manual_price' value='".h((string)($product['manual_price']
 
 echo "<h3>Proveedor</h3>
 <div id='provider-link-message' style='margin-bottom:8px; color:#b00;'></div>
-<form id='provider-link-form' method='post' style='position:relative; max-width:600px;'>
+<form id='provider-link-form' method='post' style='max-width:820px;'>
   <input type='hidden' name='csrf' id='provider-link-csrf' value='".h(csrf_token())."'>
-  <input type='hidden' name='provider_product_id' id='provider_product_id' value=''>
   <input type='hidden' name='product_id' id='provider-store-product-id' value='".h((string)$productId)."'>
-  <input type='text' id='provider-product-search' placeholder='Buscar producto del proveedor…' style='width:100%; padding:6px;'>
-  <div id='provider-product-suggestions' style='display:none; position:absolute; left:0; right:0; top:38px; border:1px solid #ccc; background:#fff; z-index:5; max-height:240px; overflow:auto;'></div>
-  <button type='button' id='provider-link-btn' style='margin-top:10px;'>Vincular</button>
-</form>";
+  <div style='display:flex; gap:8px; align-items:center;'>
+    <input type='text' id='provider-product-search' placeholder='Buscar producto del proveedor…' style='flex:1; padding:6px;'>
+    <button type='submit' id='provider-search-btn'>Buscar</button>
+  </div>
+</form>
+<div id='provider-search-results' style='margin-top:12px;'></div>";
 
 echo "<h3>Productos vinculados</h3>";
 if (!$linkedProducts) {
@@ -165,14 +166,11 @@ echo <<<JS
 <script>
 (function() {
   const searchInput = document.getElementById('provider-product-search');
-  const suggestionsBox = document.getElementById('provider-product-suggestions');
-  const hiddenInput = document.getElementById('provider_product_id');
-  const linkBtn = document.getElementById('provider-link-btn');
+  const resultsBox = document.getElementById('provider-search-results');
+  const searchForm = document.getElementById('provider-link-form');
   const messageBox = document.getElementById('provider-link-message');
   const csrfToken = document.getElementById('provider-link-csrf').value;
   const productId = document.getElementById('provider-store-product-id').value;
-  let debounceTimer = null;
-  let currentItems = [];
 
   function escapeHtml(value) {
     return value.replace(/[&<>"']/g, function(match) {
@@ -191,32 +189,35 @@ echo <<<JS
     messageBox.style.color = color || '#b00';
   }
 
-  function renderSuggestions(items) {
-    currentItems = items;
+  function formatPrice(value) {
+    if (value === null || value === undefined || value === '') return '—';
+    const numberValue = Number(value);
+    if (Number.isNaN(numberValue)) return '—';
+    return '$' + numberValue.toFixed(2);
+  }
+
+  function renderResults(items) {
     if (!items.length) {
-      suggestionsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
-      suggestionsBox.style.display = 'block';
+      resultsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
       return;
     }
-    suggestionsBox.innerHTML = items.map(function(item) {
-      const text = escapeHtml(item.title) + " — SKU: " + escapeHtml(item.sku || '—') +
-        " — Proveedor: " + escapeHtml(item.provider_name || '—') +
-        " — Stock: " + escapeHtml(String(item.stock));
-      return "<div data-id='" + item.id + "' style='padding:8px; cursor:pointer; border-bottom:1px solid #eee;'>" + text + "</div>";
+    const rows = items.map(function(item) {
+      return "<tr data-id='" + item.id + "'>" +
+        "<td>" + escapeHtml(item.provider_name || '—') + "</td>" +
+        "<td>" + escapeHtml(item.title) + "</td>" +
+        "<td>" + escapeHtml(item.sku || '') + "</td>" +
+        "<td>" + escapeHtml(item.universal_code || '') + "</td>" +
+        "<td>" + escapeHtml(formatPrice(item.price)) + "</td>" +
+        "<td><button type='button' class='provider-link-action'>Vincular</button></td>" +
+        "</tr>";
     }).join('');
-    suggestionsBox.style.display = 'block';
+    resultsBox.innerHTML = "<table border='1' cellpadding='6' cellspacing='0' style='width:100%;'>" +
+      "<tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Precio</th><th>Acciones</th></tr>" +
+      rows +
+      "</table>";
   }
 
-  function clearSelection() {
-    hiddenInput.value = '';
-    linkBtn.disabled = false;
-  }
-
-  function hideSuggestions() {
-    suggestionsBox.style.display = 'none';
-  }
-
-  function fetchSuggestions(query) {
+  function fetchResults(query) {
     const params = new URLSearchParams({
       q: query,
       product_id: productId
@@ -227,7 +228,7 @@ echo <<<JS
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (Array.isArray(data)) {
-          renderSuggestions(data);
+          renderResults(data);
         } else if (data && data.error) {
           setMessage(data.error);
         }
@@ -237,46 +238,42 @@ echo <<<JS
       });
   }
 
-  if (searchInput) {
-    searchInput.addEventListener('input', function() {
-      const query = searchInput.value.trim();
-      setMessage('');
-      clearSelection();
-      if (debounceTimer) clearTimeout(debounceTimer);
-      if (query.length < 2) {
-        hideSuggestions();
-        return;
-      }
-      debounceTimer = setTimeout(function() {
-        fetchSuggestions(query);
-      }, 300);
-    });
-
-    suggestionsBox.addEventListener('click', function(event) {
-      const target = event.target.closest('[data-id]');
-      if (!target) return;
-      const id = target.getAttribute('data-id');
-      const item = currentItems.find(function(row) { return String(row.id) === String(id); });
-      if (!item) return;
-      hiddenInput.value = item.id;
-      searchInput.value = item.title;
-      hideSuggestions();
-    });
-
-    document.addEventListener('click', function(event) {
-      if (!suggestionsBox.contains(event.target) && event.target !== searchInput) {
-        hideSuggestions();
-      }
-    });
+  function addLinkedRow(item) {
+    const emptyRow = document.getElementById('linked-products-empty');
+    if (emptyRow) emptyRow.remove();
+    let table = document.getElementById('linked-products-table');
+    if (!table) {
+      table = document.createElement('table');
+      table.id = 'linked-products-table';
+      table.setAttribute('border', '1');
+      table.setAttribute('cellpadding', '6');
+      table.setAttribute('cellspacing', '0');
+      table.innerHTML = "<tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th><th>Acciones</th></tr>";
+      resultsBox.insertAdjacentElement('afterend', table);
+    }
+    const row = document.createElement('tr');
+    const providerName = item.provider_name || '—';
+    row.innerHTML = "<td>" + escapeHtml(String(item.id)) + "</td>" +
+      "<td>" + escapeHtml(item.title) + "</td>" +
+      "<td>" + escapeHtml(item.sku || '') + "</td>" +
+      "<td>" + escapeHtml(providerName) + "</td>" +
+      "<td>" + escapeHtml(String(item.stock)) + "</td>" +
+      "<td>" +
+      "<form method='post' style='margin:0' onsubmit='return confirm(\"¿Eliminar vínculo?\")'>" +
+      "<input type='hidden' name='csrf' value='" + escapeHtml(csrfToken) + "'>" +
+      "<input type='hidden' name='action' value='unlink_source'>" +
+      "<input type='hidden' name='provider_product_id' value='" + escapeHtml(String(item.id)) + "'>" +
+      "<button type='submit'>Eliminar</button>" +
+      "</form>" +
+      "</td>";
+    table.appendChild(row);
   }
 
-  linkBtn.addEventListener('click', function() {
-    const linkedId = hiddenInput.value;
+  function linkProviderProduct(linkedId, rowEl) {
     if (!linkedId) {
-      setMessage('Seleccioná un producto del proveedor.');
+      setMessage('Producto inválido.');
       return;
     }
-    linkBtn.disabled = true;
     setMessage('');
     const body = new URLSearchParams({
       product_id: productId,
@@ -304,48 +301,44 @@ echo <<<JS
           setMessage('No se pudo vincular.');
           return;
         }
-        const item = data.item;
-        const emptyRow = document.getElementById('linked-products-empty');
-        if (emptyRow) emptyRow.remove();
-        let table = document.getElementById('linked-products-table');
-        if (!table) {
-          table = document.createElement('table');
-          table.id = 'linked-products-table';
-          table.setAttribute('border', '1');
-          table.setAttribute('cellpadding', '6');
-          table.setAttribute('cellspacing', '0');
-          table.innerHTML = "<tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th><th>Acciones</th></tr>";
-          document.getElementById('provider-link-form').insertAdjacentElement('afterend', table);
-        }
-        const row = document.createElement('tr');
-        const providerName = item.provider_name || '—';
-        row.innerHTML = "<td>" + escapeHtml(String(item.id)) + "</td>" +
-          "<td>" + escapeHtml(item.title) + "</td>" +
-          "<td>" + escapeHtml(item.sku || '') + "</td>" +
-          "<td>" + escapeHtml(providerName) + "</td>" +
-          "<td>" + escapeHtml(String(item.stock)) + "</td>" +
-          "<td>" +
-          "<form method='post' style='margin:0' onsubmit='return confirm(\"¿Eliminar vínculo?\")'>" +
-          "<input type='hidden' name='csrf' value='" + escapeHtml(csrfToken) + "'>" +
-          "<input type='hidden' name='action' value='unlink_source'>" +
-          "<input type='hidden' name='provider_product_id' value='" + escapeHtml(String(item.id)) + "'>" +
-          "<button type='submit'>Eliminar</button>" +
-          "</form>" +
-          "</td>";
-        table.appendChild(row);
+        addLinkedRow(data.item);
         setMessage('Vinculado correctamente.', 'green');
-        searchInput.value = '';
-        hiddenInput.value = '';
-        hideSuggestions();
+        if (rowEl && rowEl.parentNode) {
+          rowEl.parentNode.removeChild(rowEl);
+        }
+        if (resultsBox.querySelectorAll('tbody tr, table tr[data-id]').length === 0) {
+          resultsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
+        }
       })
       .catch(function(err) {
         const errorMessage = err && err.error ? err.error : 'No se pudo vincular.';
         setMessage(errorMessage);
-      })
-      .finally(function() {
-        linkBtn.disabled = false;
       });
-  });
+  }
+
+  if (searchForm) {
+    searchForm.addEventListener('submit', function(event) {
+      event.preventDefault();
+      const query = searchInput.value.trim();
+      setMessage('');
+      if (!query) {
+        resultsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
+        return;
+      }
+      fetchResults(query);
+    });
+  }
+
+  if (resultsBox) {
+    resultsBox.addEventListener('click', function(event) {
+      const button = event.target.closest('.provider-link-action');
+      if (!button) return;
+      const row = button.closest('tr[data-id]');
+      if (!row) return;
+      const linkedId = row.getAttribute('data-id');
+      linkProviderProduct(linkedId, row);
+    });
+  }
 })();
 </script>
 JS;

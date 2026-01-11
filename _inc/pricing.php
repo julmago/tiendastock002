@@ -43,9 +43,19 @@ function current_sell_price_details(PDO $pdo, array $store, array $sp): array {
   $linkedStock = provider_stock_sum($pdo, (int)$sp['id']);
   $linkedHasStock = $linkedStock > 0;
 
+  $minAllowed = $base * 1.5;
+  $minApplied = false;
+
   if ($manualPresent) {
-    $priceCalculated = (float)$sp['manual_price'];
-    $priceSource = 'manual';
+    $manualValue = (float)$sp['manual_price'];
+    if ($linkedHasStock && $minAllowed > 0.0 && $manualValue < $minAllowed) {
+      $priceCalculated = $autoPrice;
+      $priceSource = 'provider';
+      $minApplied = true;
+    } else {
+      $priceCalculated = $manualValue;
+      $priceSource = 'manual';
+    }
   } elseif ($linkedHasStock) {
     $priceCalculated = $autoPrice;
     $priceSource = 'provider';
@@ -57,15 +67,8 @@ function current_sell_price_details(PDO $pdo, array $store, array $sp): array {
     $priceSource = 'provider';
   }
 
-  $minAllowed = $base * 1.15;
-  $minApplied = false;
-  if ($priceSource === 'provider' && $minAllowed > 0.0 && $priceCalculated < $minAllowed) {
-    $minApplied = true;
-  }
-  $finalPrice = $minApplied ? max($autoPrice, $minAllowed) : $priceCalculated;
-
   return [
-    'price' => $finalPrice,
+    'price' => $priceCalculated,
     'min_applied' => $minApplied,
     'min_allowed' => $minAllowed,
     'auto_price' => $autoPrice,

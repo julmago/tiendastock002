@@ -114,7 +114,6 @@ $linkedProducts = $linkedSt->fetchAll();
 page_header('Producto');
 if (!empty($msg)) echo "<p style='color:green'>".h($msg)."</p>";
 if (!empty($err)) echo "<p style='color:#b00'>".h($err)."</p>";
-if (!empty($minAppliedMsg)) echo "<p style='color:#b00'>".h($minAppliedMsg)."</p>";
 
 echo "<p><a href='productos.php?store_id=".h((string)$storeId)."'>← Volver al listado</a></p>";
 
@@ -129,7 +128,9 @@ echo "<h3>Editar producto</h3>
 <button>Guardar cambios</button>
 </form><hr>";
 
-echo "<h3>Stock y precio</h3>
+echo "<h3>Stock y precio</h3>";
+if (!empty($minAppliedMsg)) echo "<p style='color:#b00'>".h($minAppliedMsg)."</p>";
+echo "
 <p>Stock proveedor: ".h((string)$provStock)." | Precio actual (".h($priceSourceLabel)."): ".h($sellTxt)." (total: ".h((string)$stockTotal).")</p>
 <form method='post'>
 <input type='hidden' name='csrf' value='".h(csrf_token())."'>

@@ -77,7 +77,13 @@ $productSt->execute([$productId,(int)$seller['id']]);
 $product = $productSt->fetch();
 
 $provStock = provider_stock_sum($pdo, (int)$product['id']);
-$sell = current_sell_price($pdo, $product, $product);
+$sellDetails = current_sell_price_details($pdo, $product, $product);
+$sell = (float)$sellDetails['price'];
+$minAppliedMsg = '';
+if (!empty($sellDetails['min_applied'])) {
+  $minAllowed = (float)$sellDetails['min_allowed'];
+  $minAppliedMsg = "Mínimo permitido es $".number_format($minAllowed, 2, ',', '.').". Se aplicó el precio automático.";
+}
 $stockTotal = $provStock + (int)$product['own_stock_qty'];
 $sellTxt = ($sell>0) ? '$'.number_format($sell,2,',','.') : 'Sin stock';
 
@@ -98,6 +104,7 @@ $linkedProducts = $linkedSt->fetchAll();
 page_header('Producto');
 if (!empty($msg)) echo "<p style='color:green'>".h($msg)."</p>";
 if (!empty($err)) echo "<p style='color:#b00'>".h($err)."</p>";
+if (!empty($minAppliedMsg)) echo "<p style='color:#b00'>".h($minAppliedMsg)."</p>";
 
 echo "<p><a href='productos.php?store_id=".h((string)$storeId)."'>← Volver al listado</a></p>";
 

@@ -133,7 +133,9 @@ echo "<h3>Proveedor</h3>
     <button type='submit' id='provider-search-btn'>Buscar</button>
   </div>
 </form>
-<div id='provider-search-results' style='margin-top:12px;'></div>";
+<div id='provider-search-results' style='margin-top:12px;'>
+  <div id='provider-search-empty-state' style='padding:8px; color:#666; display:none;'></div>
+</div>";
 
 echo "<h3>Productos vinculados</h3>";
 if (!$linkedProducts) {
@@ -169,6 +171,7 @@ echo <<<JS
   const resultsBox = document.getElementById('provider-search-results');
   const searchForm = document.getElementById('provider-link-form');
   const messageBox = document.getElementById('provider-link-message');
+  const emptyStateBox = document.getElementById('provider-search-empty-state');
   const csrfToken = document.getElementById('provider-link-csrf').value;
   const productId = document.getElementById('provider-store-product-id').value;
 
@@ -201,9 +204,55 @@ echo <<<JS
     no_results: 'Sin resultados para la búsqueda ingresada.'
   };
 
+  function getResultsTable() {
+    return document.getElementById('provider-search-results-table');
+  }
+
+  function ensureResultsTable() {
+    let table = getResultsTable();
+    if (!table) {
+      table = document.createElement('table');
+      table.id = 'provider-search-results-table';
+      table.setAttribute('border', '1');
+      table.setAttribute('cellpadding', '6');
+      table.setAttribute('cellspacing', '0');
+      table.style.width = '100%';
+      table.innerHTML = "<thead><tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Precio</th><th>Acciones</th></tr></thead><tbody></tbody>";
+      resultsBox.appendChild(table);
+    }
+    return table;
+  }
+
+  function updateSearchResultsVisibility() {
+    const table = getResultsTable();
+    const tbody = table ? table.querySelector('tbody') : null;
+    const rowCount = tbody ? tbody.querySelectorAll('tr').length : 0;
+    if (table) {
+      table.style.display = rowCount > 0 ? '' : 'none';
+    }
+    if (emptyStateBox) {
+      emptyStateBox.style.display = rowCount > 0 ? 'none' : '';
+    }
+    return rowCount;
+  }
+
+  function updateSearchResultsVisibilityWithMessage(reason) {
+    const rowCount = updateSearchResultsVisibility();
+    if (rowCount === 0 && emptyStateBox) {
+      const message = emptyStateMessages[reason] || emptyStateMessages.no_results;
+      emptyStateBox.textContent = message;
+    }
+  }
+
   function renderEmptyState(reason) {
-    const message = emptyStateMessages[reason] || emptyStateMessages.no_results;
-    resultsBox.innerHTML = "<div class='empty-state' style='padding:8px; color:#666;'>" + escapeHtml(message) + "</div>";
+    const table = getResultsTable();
+    if (table) {
+      const tbody = table.querySelector('tbody');
+      if (tbody) {
+        tbody.innerHTML = '';
+      }
+    }
+    updateSearchResultsVisibilityWithMessage(reason);
   }
 
   function renderResults(items, emptyReason) {
@@ -211,6 +260,8 @@ echo <<<JS
       renderEmptyState(emptyReason || 'no_results');
       return;
     }
+    const table = ensureResultsTable();
+    const tbody = table.querySelector('tbody');
     const rows = items.map(function(item) {
       return "<tr data-id='" + item.id + "'>" +
         "<td>" + escapeHtml(item.provider_name || '—') + "</td>" +
@@ -221,10 +272,8 @@ echo <<<JS
         "<td><button type='button' class='provider-link-action'>Vincular</button></td>" +
         "</tr>";
     }).join('');
-    resultsBox.innerHTML = "<table border='1' cellpadding='6' cellspacing='0' style='width:100%;'>" +
-      "<tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Precio</th><th>Acciones</th></tr>" +
-      rows +
-      "</table>";
+    tbody.innerHTML = rows;
+    updateSearchResultsVisibility();
   }
 
   let lastQuery = '';
@@ -321,13 +370,7 @@ echo <<<JS
         if (rowEl && rowEl.parentNode) {
           rowEl.parentNode.removeChild(rowEl);
         }
-        if (resultsBox.querySelectorAll('tbody tr, table tr[data-id]').length === 0) {
-          if (lastQuery) {
-            fetchResults(lastQuery);
-          } else {
-            renderEmptyState('no_results');
-          }
-        }
+        updateSearchResultsVisibilityWithMessage('all_linked');
       })
       .catch(function(err) {
         const errorMessage = err && err.error ? err.error : 'No se pudo vincular.';

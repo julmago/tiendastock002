@@ -28,17 +28,38 @@ function provider_stock_sum(PDO $pdo, int $store_product_id): int {
   return (int)($st->fetch()['s'] ?? 0);
 }
 
-function current_sell_price(PDO $pdo, array $store, array $sp): float {
-  if (!empty($sp['manual_price'])) return (float)$sp['manual_price'];
+function price_value_present($value): bool {
+  return $value !== null && $value !== '' && is_numeric($value);
+}
 
+function current_sell_price_details(PDO $pdo, array $store, array $sp): array {
   $best = best_provider_source($pdo, (int)$sp['id']);
-  if ($best) {
-    $base = (float)$best['base_price'];
-    return $base * (1.0 + ((float)$store['markup_percent']/100.0));
+  $base = $best ? (float)$best['base_price'] : 0.0;
+  $autoPrice = $best ? ($base * (1.0 + ((float)$store['markup_percent']/100.0))) : 0.0;
+
+  if (price_value_present($sp['manual_price'] ?? null)) {
+    $priceCalculated = (float)$sp['manual_price'];
+  } elseif (price_value_present($sp['own_stock_price'] ?? null)) {
+    $priceCalculated = (float)$sp['own_stock_price'];
+  } else {
+    $priceCalculated = $autoPrice;
   }
-  if ((int)$sp['own_stock_qty'] > 0) {
-    return (float)($sp['own_stock_price'] ?? 0);
-  }
-  return 0.0;
+
+  $minAllowed = $base * 1.15;
+  $minApplied = ($minAllowed > 0.0 && $priceCalculated < $minAllowed);
+  $finalPrice = $minApplied ? $autoPrice : $priceCalculated;
+
+  return [
+    'price' => $finalPrice,
+    'min_applied' => $minApplied,
+    'min_allowed' => $minAllowed,
+    'auto_price' => $autoPrice,
+    'base_price' => $base
+  ];
+}
+
+function current_sell_price(PDO $pdo, array $store, array $sp): float {
+  $details = current_sell_price_details($pdo, $store, $sp);
+  return (float)$details['price'];
 }
 ?>

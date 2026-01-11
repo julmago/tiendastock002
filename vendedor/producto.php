@@ -31,6 +31,20 @@ $providerProducts = $pdo->query("
   ORDER BY pp.id DESC LIMIT 200
 ")->fetchAll();
 
+$linkedSt = $pdo->prepare("
+  SELECT pp.id, pp.title, pp.sku, p.display_name AS provider_name,
+         COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) AS stock
+  FROM store_product_sources sps
+  JOIN provider_products pp ON pp.id = sps.provider_product_id
+  LEFT JOIN providers p ON p.id = pp.provider_id
+  LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
+  WHERE sps.store_product_id = ?
+  GROUP BY pp.id, pp.title, pp.sku, p.display_name
+  ORDER BY pp.id DESC
+");
+$linkedSt->execute([$productId]);
+$linkedProducts = $linkedSt->fetchAll();
+
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'update_info') {
   $title = trim((string)($_POST['title'] ?? ''));
   $sku = trim((string)($_POST['sku'] ?? ''));
@@ -120,5 +134,24 @@ echo "</select>
 <select name='enabled'><option value='1'>ON</option><option value='0'>OFF</option></select>
 <button>Aplicar</button>
 </form>";
+
+echo "<h3>Productos vinculados</h3>";
+if (!$linkedProducts) {
+  echo "<p>No hay productos vinculados a esta publicación.</p>";
+} else {
+  echo "<table border='1' cellpadding='6' cellspacing='0'>
+  <tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th></tr>";
+  foreach($linkedProducts as $linked){
+    $providerName = $linked['provider_name'] ?: '—';
+    echo "<tr>
+      <td>".h((string)$linked['id'])."</td>
+      <td>".h((string)$linked['title'])."</td>
+      <td>".h((string)($linked['sku'] ?? ''))."</td>
+      <td>".h((string)$providerName)."</td>
+      <td>".h((string)$linked['stock'])."</td>
+    </tr>";
+  }
+  echo "</table>";
+}
 
 page_footer();

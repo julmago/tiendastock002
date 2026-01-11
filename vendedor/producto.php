@@ -31,20 +31,6 @@ $providerProducts = $pdo->query("
   ORDER BY pp.id DESC LIMIT 200
 ")->fetchAll();
 
-$linkedSt = $pdo->prepare("
-  SELECT pp.id, pp.title, pp.sku, p.display_name AS provider_name,
-         COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) AS stock
-  FROM store_product_sources sps
-  JOIN provider_products pp ON pp.id = sps.provider_product_id
-  LEFT JOIN providers p ON p.id = pp.provider_id
-  LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
-  WHERE sps.store_product_id = ? AND sps.enabled=1
-  GROUP BY pp.id, pp.title, pp.sku, p.display_name
-  ORDER BY pp.id DESC
-");
-$linkedSt->execute([$productId]);
-$linkedProducts = $linkedSt->fetchAll();
-
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'update_info') {
   $title = trim((string)($_POST['title'] ?? ''));
   $sku = trim((string)($_POST['sku'] ?? ''));
@@ -84,6 +70,18 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'toggle_
   }
 }
 
+if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'unlink_source') {
+  $ppId = (int)($_POST['provider_product_id'] ?? 0);
+
+  if (!$ppId) $err = "Producto inválido.";
+  else {
+    $pdo->prepare("DELETE FROM store_product_sources WHERE store_product_id=? AND provider_product_id=? LIMIT 1")
+        ->execute([$productId,$ppId]);
+    header("Location: producto.php?id=".$productId);
+    exit;
+  }
+}
+
 $productSt->execute([$productId,(int)$seller['id']]);
 $product = $productSt->fetch();
 
@@ -91,6 +89,20 @@ $provStock = provider_stock_sum($pdo, (int)$product['id']);
 $sell = current_sell_price($pdo, $product, $product);
 $stockTotal = $provStock + (int)$product['own_stock_qty'];
 $sellTxt = ($sell>0) ? '$'.number_format($sell,2,',','.') : 'Sin stock';
+
+$linkedSt = $pdo->prepare("
+  SELECT pp.id, pp.title, pp.sku, p.display_name AS provider_name,
+         COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) AS stock
+  FROM store_product_sources sps
+  JOIN provider_products pp ON pp.id = sps.provider_product_id
+  LEFT JOIN providers p ON p.id = pp.provider_id
+  LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
+  WHERE sps.store_product_id = ? AND sps.enabled=1
+  GROUP BY pp.id, pp.title, pp.sku, p.display_name
+  ORDER BY pp.id DESC
+");
+$linkedSt->execute([$productId]);
+$linkedProducts = $linkedSt->fetchAll();
 
 page_header('Producto');
 if (!empty($msg)) echo "<p style='color:green'>".h($msg)."</p>";
@@ -140,7 +152,7 @@ if (!$linkedProducts) {
   echo "<p>No hay productos vinculados a esta publicación.</p>";
 } else {
   echo "<table border='1' cellpadding='6' cellspacing='0'>
-  <tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th></tr>";
+  <tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th><th>Acciones</th></tr>";
   foreach($linkedProducts as $linked){
     $providerName = $linked['provider_name'] ?: '—';
     echo "<tr>
@@ -149,6 +161,14 @@ if (!$linkedProducts) {
       <td>".h((string)($linked['sku'] ?? ''))."</td>
       <td>".h((string)$providerName)."</td>
       <td>".h((string)$linked['stock'])."</td>
+      <td>
+        <form method='post' style='margin:0' onsubmit='return confirm(\"¿Eliminar vínculo?\")'>
+          <input type='hidden' name='csrf' value='".h(csrf_token())."'>
+          <input type='hidden' name='action' value='unlink_source'>
+          <input type='hidden' name='provider_product_id' value='".h((string)$linked['id'])."'>
+          <button type='submit'>Eliminar</button>
+        </form>
+      </td>
     </tr>";
   }
   echo "</table>";

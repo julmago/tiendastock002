@@ -31,9 +31,20 @@ if (!$st->fetch()) {
   exit;
 }
 
-$existsSt = $pdo->prepare("SELECT id FROM store_product_sources WHERE store_product_id=? AND provider_product_id=? AND enabled=1 LIMIT 1");
+$existsSt = $pdo->prepare("
+  SELECT sps.id
+  FROM store_product_sources sps
+  JOIN provider_products pp ON pp.id = sps.provider_product_id
+  LEFT JOIN providers p ON p.id = pp.provider_id
+  LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
+  WHERE sps.store_product_id = ? AND sps.provider_product_id = ? AND sps.enabled = 1
+  LIMIT 1
+");
 $existsSt->execute([$productId, $linkedId]);
-if ($existsSt->fetch()) {
+$existingLink = $existsSt->fetch();
+// Log temporal para verificar IDs y resultado de la validación de vínculo.
+error_log(sprintf('[link_product] validate link store_product_id=%d provider_product_id=%d exists=%s', $productId, $linkedId, $existingLink ? '1' : '0'));
+if ($existingLink) {
   http_response_code(409);
   echo json_encode(['error' => 'Ya está vinculado.']);
   exit;
@@ -62,8 +73,17 @@ try {
   $pdo->prepare("INSERT INTO store_product_sources(store_product_id,provider_product_id,enabled) VALUES(?,?,1)")
       ->execute([$productId, $linkedId]);
 } catch (Throwable $e) {
-  http_response_code(409);
-  echo json_encode(['error' => 'Ya está vinculado.']);
+  $existsSt->execute([$productId, $linkedId]);
+  $existingLink = $existsSt->fetch();
+  // Log temporal para confirmar si el error es por vínculo existente.
+  error_log(sprintf('[link_product] insert failed store_product_id=%d provider_product_id=%d exists=%s', $productId, $linkedId, $existingLink ? '1' : '0'));
+  if ($existingLink) {
+    http_response_code(409);
+    echo json_encode(['error' => 'Ya está vinculado.']);
+    exit;
+  }
+  http_response_code(500);
+  echo json_encode(['error' => 'No se pudo vincular.']);
   exit;
 }
 

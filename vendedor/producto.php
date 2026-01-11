@@ -89,6 +89,13 @@ if (!empty($sellDetails['min_applied'])) {
 }
 $stockTotal = $provStock + (int)$product['own_stock_qty'];
 $sellTxt = ($sell>0) ? '$'.number_format($sell,2,',','.') : 'Sin stock';
+$priceSource = $sellDetails['price_source'] ?? 'provider';
+$priceSourceLabel = 'proveedor';
+if ($priceSource === 'manual') {
+  $priceSourceLabel = 'manual';
+} elseif ($priceSource === 'own') {
+  $priceSourceLabel = 'stock propio';
+}
 
 $linkedSt = $pdo->prepare("
   SELECT pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name AS provider_name,
@@ -123,7 +130,7 @@ echo "<h3>Editar producto</h3>
 </form><hr>";
 
 echo "<h3>Stock y precio</h3>
-<p>Stock proveedor: ".h((string)$provStock)." | Precio actual: ".h($sellTxt)." (total: ".h((string)$stockTotal).")</p>
+<p>Stock proveedor: ".h((string)$provStock)." | Precio actual (".h($priceSourceLabel)."): ".h($sellTxt)." (total: ".h((string)$stockTotal).")</p>
 <form method='post'>
 <input type='hidden' name='csrf' value='".h(csrf_token())."'>
 <input type='hidden' name='action' value='update_stock'>

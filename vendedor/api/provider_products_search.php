@@ -42,13 +42,30 @@ if ($q === '' || mb_strlen($q) < 2) {
 $like = "%{$q}%";
 $prefix = "{$q}%";
 $params = [$productId, $like, $like, $like];
+$conditions = [
+  'pp.title LIKE ?',
+  'pp.sku LIKE ?',
+  'pp.universal_code LIKE ?',
+];
 $providerFilter = '';
 if ($providerId > 0) {
   $providerFilter = ' AND pp.provider_id = ?';
   $params[] = $providerId;
 }
-$params[] = $q;
-$params[] = $prefix;
+$orderParts = [];
+$orderParams = [];
+$isUniversalCode = preg_match('/^\d{8,14}$/', $q) === 1;
+if ($isUniversalCode) {
+  $conditions[] = 'pp.universal_code = ?';
+  $params[] = $q;
+  $orderParts[] = '(pp.universal_code = ?) DESC';
+  $orderParams[] = $q;
+}
+$orderParts[] = '(pp.title = ?) DESC';
+$orderParts[] = '(pp.title LIKE ?) DESC';
+$orderParts[] = 'pp.title ASC';
+$orderParams[] = $q;
+$orderParams[] = $prefix;
 
 $sql = "
   SELECT pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name AS provider_name,
@@ -60,18 +77,16 @@ $sql = "
     ON sps.provider_product_id = pp.id AND sps.store_product_id = ? AND sps.enabled=1
   WHERE pp.status='active' AND p.status='active'
     AND sps.id IS NULL
-    AND (pp.title LIKE ? OR pp.sku LIKE ? OR pp.universal_code LIKE ?)
+    AND (".implode(' OR ', $conditions).")
     {$providerFilter}
   GROUP BY pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name
   HAVING stock > 0
-  ORDER BY (pp.title = ?) DESC,
-           (pp.title LIKE ?) DESC,
-           pp.title ASC
+  ORDER BY ".implode(', ', $orderParts)."
   LIMIT 20
 ";
 
 $searchSt = $pdo->prepare($sql);
-$searchSt->execute($params);
+$searchSt->execute(array_merge($params, $orderParams));
 $items = $searchSt->fetchAll();
 
 $out = [];

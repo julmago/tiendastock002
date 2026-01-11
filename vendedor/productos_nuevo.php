@@ -71,8 +71,8 @@ echo "<h3>Copiar desde proveedor</h3>
       </tr>
     </thead>
     <tbody id='provider-search-body'>
-      <tr id='provider-search-empty'>
-        <td colspan='7'>Sin resultados</td>
+      <tr id='provider-search-empty' style='display:none'>
+        <td colspan='7'>No se encontraron productos del proveedor.</td>
       </tr>
     </tbody>
   </table>
@@ -157,7 +157,8 @@ echo "<h3>Copiar desde proveedor</h3>
   const runSearch = () => {
     const q = (searchInput.value || '').trim();
     if (!q) {
-      renderResults([]);
+      clearResults();
+      emptyRow.style.display = 'none';
       return;
     }
     const params = new URLSearchParams({ q });

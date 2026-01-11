@@ -40,13 +40,13 @@ if ($existsSt->fetch()) {
 }
 
 $ppSt = $pdo->prepare("
-  SELECT pp.id, pp.title, pp.sku, p.display_name AS provider_name,
+  SELECT pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name AS provider_name,
          COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) AS stock
   FROM provider_products pp
   JOIN providers p ON p.id=pp.provider_id
   LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
   WHERE pp.id=? AND pp.status='active' AND p.status='active'
-  GROUP BY pp.id, pp.title, pp.sku, p.display_name
+  GROUP BY pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name
   HAVING stock > 0
   LIMIT 1
 ");
@@ -73,6 +73,8 @@ $response = [
     'id' => (int)$pp['id'],
     'title' => (string)$pp['title'],
     'sku' => (string)($pp['sku'] ?? ''),
+    'universal_code' => (string)($pp['universal_code'] ?? ''),
+    'price' => $pp['base_price'] !== null ? (float)$pp['base_price'] : null,
     'provider_name' => (string)($pp['provider_name'] ?? ''),
     'stock' => (int)$pp['stock'],
   ],

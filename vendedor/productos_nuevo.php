@@ -162,7 +162,7 @@ echo "<h3>Copiar desde proveedor</h3>
       return;
     }
     const params = new URLSearchParams({ q });
-    fetch(`/vendedor/api/provider_products_copy_search.php?${params.toString()}`, {
+    fetch(`/vendedor/api/provider_products_search.php?${params.toString()}`, {
       credentials: 'same-origin',
     })
       .then((res) => res.json())

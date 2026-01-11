@@ -35,18 +35,19 @@ function price_value_present($value): bool {
 function current_sell_price_details(PDO $pdo, array $store, array $sp): array {
   $best = best_provider_source($pdo, (int)$sp['id']);
   $base = $best ? (float)$best['base_price'] : 0.0;
-  $autoPrice = $best ? ($base * (1.0 + ((float)$store['markup_percent']/100.0))) : 0.0;
+  $markupFactor = 1.0 + ((float)$store['markup_percent']/100.0);
+  $ownPrice = price_value_present($sp['own_stock_price'] ?? null) ? (float)$sp['own_stock_price'] : 0.0;
+  $autoPrice = $best ? ($base * $markupFactor) : ($ownPrice > 0.0 ? ($ownPrice * $markupFactor) : 0.0);
 
   if (price_value_present($sp['manual_price'] ?? null)) {
     $priceCalculated = (float)$sp['manual_price'];
-  } elseif (price_value_present($sp['own_stock_price'] ?? null)) {
-    $priceCalculated = (float)$sp['own_stock_price'];
   } else {
     $priceCalculated = $autoPrice;
   }
 
   $minAllowed = $base * 1.15;
-  $minApplied = ($minAllowed > 0.0 && $priceCalculated < $minAllowed);
+  $manualPresent = price_value_present($sp['manual_price'] ?? null);
+  $minApplied = ($manualPresent && $minAllowed > 0.0 && $priceCalculated < $minAllowed);
   $finalPrice = $minApplied ? $autoPrice : $priceCalculated;
 
   return [

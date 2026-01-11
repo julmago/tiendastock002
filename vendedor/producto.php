@@ -40,13 +40,27 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'update_
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'update_stock') {
   $ownQty = (int)($_POST['own_stock_qty'] ?? 0);
-  $ownPrice = (float)($_POST['own_stock_price'] ?? 0);
-  $manual = trim((string)($_POST['manual_price'] ?? ''));
-  $manualVal = ($manual === '') ? null : (float)$manual;
+  $ownPriceRaw = trim((string)($_POST['own_stock_price'] ?? ''));
+  $manualRaw = trim((string)($_POST['manual_price'] ?? ''));
+  $ownPriceVal = ($ownPriceRaw === '') ? null : (float)$ownPriceRaw;
+  $manualVal = ($manualRaw === '') ? null : (float)$manualRaw;
+
+  if ($manualRaw !== '') {
+    $best = best_provider_source($pdo, $productId);
+    $base = $best ? (float)$best['base_price'] : 0.0;
+    $minAllowed = $base * 1.15;
+
+    if ($minAllowed > 0.0 && $manualVal < $minAllowed) {
+      $manualVal = null;
+      $err = "Mínimo permitido es $".number_format($minAllowed, 2, ',', '.').". No se aplicó el precio manual.";
+    }
+  }
 
   $pdo->prepare("UPDATE store_products SET own_stock_qty=?, own_stock_price=?, manual_price=? WHERE id=? AND store_id=?")
-      ->execute([$ownQty, $ownPrice>0?$ownPrice:null, $manualVal, $productId, $storeId]);
-  $msg = "Stock actualizado.";
+      ->execute([$ownQty, $ownPriceVal, $manualVal, $productId, $storeId]);
+  if (empty($err)) {
+    $msg = "Stock actualizado.";
+  }
 }
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'toggle_source') {

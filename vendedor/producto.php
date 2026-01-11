@@ -59,14 +59,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'update_
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'toggle_source') {
   $ppId = (int)($_POST['provider_product_id'] ?? 0);
-  $enabled = (int)($_POST['enabled'] ?? 1);
 
   if (!$ppId) $err = "Elegí un proveedor.";
   else {
     $pdo->prepare("INSERT INTO store_product_sources(store_product_id,provider_product_id,enabled)
-                   VALUES(?,?,?) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled)")
-        ->execute([$productId,$ppId,$enabled?1:0]);
-    $msg = "Fuente actualizada.";
+                   VALUES(?,?,1) ON DUPLICATE KEY UPDATE enabled=1")
+        ->execute([$productId,$ppId]);
+    $msg = "Vínculo agregado.";
   }
 }
 
@@ -143,7 +142,6 @@ echo "<h3>Proveedor</h3>
   }
 
 echo "</select>
-<select name='enabled'><option value='1'>ON</option><option value='0'>OFF</option></select>
 <button>Aplicar</button>
 </form>";
 

@@ -38,7 +38,7 @@ $linkedSt = $pdo->prepare("
   JOIN provider_products pp ON pp.id = sps.provider_product_id
   LEFT JOIN providers p ON p.id = pp.provider_id
   LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
-  WHERE sps.store_product_id = ?
+  WHERE sps.store_product_id = ? AND sps.enabled=1
   GROUP BY pp.id, pp.title, pp.sku, p.display_name
   ORDER BY pp.id DESC
 ");

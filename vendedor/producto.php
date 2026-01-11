@@ -123,7 +123,8 @@ Manual $ <input name='manual_price' value='".h((string)($product['manual_price']
 <button>Guardar</button>
 </form><hr>";
 
-echo "<h3>Proveedor</h3>
+echo "<div id='provider-section'>
+<h3>Proveedor</h3>
 <div id='provider-link-message' style='margin-bottom:8px; color:#b00;'></div>
 <form id='provider-link-form' method='post' style='max-width:820px;'>
   <input type='hidden' name='csrf' id='provider-link-csrf' value='".h(csrf_token())."'>
@@ -133,16 +134,19 @@ echo "<h3>Proveedor</h3>
     <button type='submit' id='provider-search-btn'>Buscar</button>
   </div>
 </form>
-<div id='provider-search-results' style='margin-top:12px;'>
+<div id='provider-results-wrap' style='margin-top:12px;'>
   <div id='provider-search-empty-state' style='padding:8px; color:#666; display:none;'></div>
+</div>
 </div>";
 
-echo "<h3>Productos vinculados</h3>";
+echo "<div id='linked-section'>
+<h3 id='linked-title'>Productos vinculados</h3>
+<div id='linked-table-wrap'>";
 if (!$linkedProducts) {
   echo "<p id='linked-products-empty'>No hay productos vinculados a esta publicación.</p>";
 } else {
   echo "<table id='linked-products-table' border='1' cellpadding='6' cellspacing='0'>
-  <tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr>";
+  <thead><tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>";
   foreach($linkedProducts as $linked){
     $providerName = $linked['provider_name'] ?: '—';
     $universalCode = $linked['universal_code'] ?: '—';
@@ -164,14 +168,15 @@ if (!$linkedProducts) {
       </td>
     </tr>";
   }
-  echo "</table>";
+  echo "</tbody></table>";
 }
+echo "</div></div>";
 
 echo <<<JS
 <script>
 (function() {
   const searchInput = document.getElementById('provider-product-search');
-  const resultsBox = document.getElementById('provider-search-results');
+  const resultsBox = document.getElementById('provider-results-wrap');
   const searchForm = document.getElementById('provider-link-form');
   const messageBox = document.getElementById('provider-link-message');
   const emptyStateBox = document.getElementById('provider-search-empty-state');
@@ -309,6 +314,7 @@ echo <<<JS
   function addLinkedRow(item) {
     const emptyRow = document.getElementById('linked-products-empty');
     if (emptyRow) emptyRow.remove();
+    const linkedTableWrap = document.getElementById('linked-table-wrap');
     let table = document.getElementById('linked-products-table');
     if (!table) {
       table = document.createElement('table');
@@ -316,9 +322,12 @@ echo <<<JS
       table.setAttribute('border', '1');
       table.setAttribute('cellpadding', '6');
       table.setAttribute('cellspacing', '0');
-      table.innerHTML = "<tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr>";
-      resultsBox.insertAdjacentElement('afterend', table);
+      table.innerHTML = "<thead><tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr></thead><tbody></tbody>";
+      if (linkedTableWrap) {
+        linkedTableWrap.appendChild(table);
+      }
     }
+    const tbody = table.querySelector('tbody') || table;
     const row = document.createElement('tr');
     const providerName = item.provider_name || '—';
     row.innerHTML = "<td>" + escapeHtml(providerName) + "</td>" +
@@ -335,7 +344,7 @@ echo <<<JS
       "<button type='submit'>Eliminar</button>" +
       "</form>" +
       "</td>";
-    table.appendChild(row);
+    tbody.appendChild(row);
   }
 
   function linkProviderProduct(linkedId, rowEl) {

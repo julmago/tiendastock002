@@ -123,7 +123,12 @@ echo "<h3>Editar producto</h3>
 <input type='hidden' name='action' value='update_info'>
 <p>Título: <input name='title' value='".h($product['title'])."' style='width:520px'></p>
 <p>SKU: <input name='sku' value='".h((string)($product['sku']??''))."' style='width:220px'></p>
-<p>Código universal (8-14 dígitos): <input name='universal_code' value='".h((string)($product['universal_code']??''))."' style='width:220px'></p>
+<p>Código universal (8-14 dígitos):
+  <span style='display:inline-flex; gap:8px; align-items:center;'>
+    <input id='universal-code-input' name='universal_code' value='".h((string)($product['universal_code']??''))."' style='width:220px'>
+    <button type='button' id='btnSearchByUniversal'>Buscar producto</button>
+  </span>
+</p>
 <p>Descripción:<br><textarea name='description' rows='4' style='width:90%'>".h((string)($product['description']??''))."</textarea></p>
 <button>Guardar cambios</button>
 </form><hr>";
@@ -198,6 +203,8 @@ echo <<<JS
   const searchForm = document.getElementById('provider-link-form');
   const messageBox = document.getElementById('provider-link-message');
   const emptyStateBox = document.getElementById('provider-search-empty-state');
+  const universalInput = document.getElementById('universal-code-input');
+  const universalSearchButton = document.getElementById('btnSearchByUniversal');
   const csrfToken = document.getElementById('provider-link-csrf').value;
   const productId = document.getElementById('provider-store-product-id').value;
 
@@ -410,6 +417,20 @@ echo <<<JS
       });
   }
 
+  function runUniversalSearch() {
+    if (!universalInput) return;
+    const code = universalInput.value.trim();
+    if (!code) {
+      setMessage('Ingresá un código universal para buscar.');
+      return;
+    }
+    if (searchInput) {
+      searchInput.value = code;
+    }
+    setMessage('');
+    fetchResults(code);
+  }
+
   if (searchForm) {
     searchForm.addEventListener('submit', function(event) {
       event.preventDefault();
@@ -420,6 +441,22 @@ echo <<<JS
         return;
       }
       fetchResults(query);
+    });
+  }
+
+  if (universalSearchButton) {
+    universalSearchButton.addEventListener('click', function(event) {
+      event.preventDefault();
+      runUniversalSearch();
+    });
+  }
+
+  if (universalInput) {
+    universalInput.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        runUniversalSearch();
+      }
     });
   }
 

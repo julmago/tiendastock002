@@ -32,7 +32,10 @@ if (!$st->fetch()) {
 }
 
 if ($q === '' || mb_strlen($q) < 2) {
-  echo json_encode([]);
+  echo json_encode([
+    'items' => [],
+    'empty_reason' => 'no_results',
+  ]);
   exit;
 }
 
@@ -84,4 +87,27 @@ foreach ($items as $item) {
   ];
 }
 
-echo json_encode($out);
+$emptyReason = '';
+if (!$out) {
+  $checkSql = "
+    SELECT pp.id
+    FROM provider_products pp
+    JOIN providers p ON p.id=pp.provider_id
+    LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
+    LEFT JOIN store_product_sources sps
+      ON sps.provider_product_id = pp.id AND sps.store_product_id = ? AND sps.enabled=1
+    WHERE pp.status='active' AND p.status='active'
+      AND sps.id IS NULL
+    GROUP BY pp.id
+    HAVING COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) > 0
+    LIMIT 1
+  ";
+  $checkSt = $pdo->prepare($checkSql);
+  $checkSt->execute([$productId]);
+  $emptyReason = $checkSt->fetch() ? 'no_results' : 'all_linked';
+}
+
+echo json_encode([
+  'items' => $out,
+  'empty_reason' => $emptyReason,
+]);

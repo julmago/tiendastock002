@@ -35,34 +35,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'create'
   }
 }
 
-if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action'] ?? '') === 'copy') {
-  $ppId = (int)($_POST['provider_product_id'] ?? 0);
-  if (!$ppId) $err="Elegí un producto de proveedor.";
-  else {
-    $pp = $pdo->prepare("SELECT title, description, sku, universal_code FROM provider_products WHERE id=? AND status='active'");
-    $pp->execute([$ppId]);
-    $row = $pp->fetch();
-    if (!$row) $err="Producto proveedor inválido.";
-    else {
-      $pdo->prepare("INSERT INTO store_products(store_id,title,sku,universal_code,description,status,own_stock_qty,own_stock_price,manual_price)
-                     VALUES(?,?,?,?,?, 'active',0,NULL,NULL)")
-          ->execute([$storeId,$row['title'],$row['sku']??null,$row['universal_code']??null,$row['description']??null]);
-      $spId = (int)$pdo->lastInsertId();
-      $pdo->prepare("INSERT IGNORE INTO store_product_sources(store_product_id,provider_product_id,enabled) VALUES(?,?,1)")
-          ->execute([$spId,$ppId]);
-      $msg="Copiado y vinculado al proveedor.";
-    }
-  }
-}
-
-$providerProducts = $pdo->query("
-  SELECT pp.id, pp.title, pp.base_price, p.display_name AS provider_name
-  FROM provider_products pp
-  JOIN providers p ON p.id=pp.provider_id
-  WHERE pp.status='active' AND p.status='active'
-  ORDER BY pp.id DESC LIMIT 200
-")->fetchAll();
-
 page_header('Vendedor - Productos');
 if (!empty($msg)) echo "<p style='color:green'>".h($msg)."</p>";
 if (!empty($err)) echo "<p style='color:#b00'>".h($err)."</p>";
@@ -70,26 +42,145 @@ if (!empty($err)) echo "<p style='color:#b00'>".h($err)."</p>";
 require __DIR__.'/partials/productos_header.php';
 
 echo "<h3>Crear desde cero</h3>
-<form method='post'>
+<form method='post' id='create-form'>
 <input type='hidden' name='csrf' value='".h(csrf_token())."'>
 <input type='hidden' name='action' value='create'>
-<p>Título: <input name='title' style='width:520px'></p>
-<p>SKU: <input name='sku' style='width:220px'></p>
-<p>Código universal (8-14 dígitos): <input name='universal_code' style='width:220px'></p>
-<p>Descripción:<br><textarea name='description' rows='3' style='width:90%'></textarea></p>
-<button>Crear</button>
+<p>Título: <input name='title' id='create-title' style='width:520px'></p>
+<p>SKU: <input name='sku' id='create-sku' style='width:220px'></p>
+<p>Código universal (8-14 dígitos): <input name='universal_code' id='create-universal-code' style='width:220px'></p>
+<p>Descripción:<br><textarea name='description' id='create-description' rows='3' style='width:90%'></textarea></p>
+<button id='create-submit'>Crear</button>
 </form><hr>";
 
 echo "<h3>Copiar desde proveedor</h3>
-<form method='post'>
-<input type='hidden' name='csrf' value='".h(csrf_token())."'>
-<input type='hidden' name='action' value='copy'>
-<select name='provider_product_id' style='width:780px'>
-<option value='0'>-- elegir --</option>";
-foreach($providerProducts as $pp){
-  echo "<option value='".h((string)$pp['id'])."'>#".h((string)$pp['id'])." ".h($pp['provider_name'])." | ".h($pp['title'])." ($".h((string)$pp['base_price']).")</option>";
-}
-echo "</select> <button>Copiar</button>
-</form><hr>";
+<div style='margin-bottom:8px'>
+  <input type='text' id='provider-search-input' placeholder='Buscar producto del proveedor…' style='width:520px'>
+  <button type='button' id='provider-search-button'>Buscar</button>
+</div>
+<div id='provider-search-results'>
+  <table border='1' cellpadding='4' cellspacing='0' style='width:100%; max-width:980px'>
+    <thead>
+      <tr>
+        <th>Proveedor</th>
+        <th>Título</th>
+        <th>SKU</th>
+        <th>Código universal</th>
+        <th>Stock</th>
+        <th>Precio</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody id='provider-search-body'>
+      <tr id='provider-search-empty'>
+        <td colspan='7'>Sin resultados</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<hr>
+<script>
+(() => {
+  const searchInput = document.getElementById('provider-search-input');
+  const searchButton = document.getElementById('provider-search-button');
+  const resultsBody = document.getElementById('provider-search-body');
+  const emptyRow = document.getElementById('provider-search-empty');
+  const createTitle = document.getElementById('create-title');
+  const createSku = document.getElementById('create-sku');
+  const createUniversal = document.getElementById('create-universal-code');
+  const createDescription = document.getElementById('create-description');
+  const createForm = document.getElementById('create-form');
+  const createSubmit = document.getElementById('create-submit');
+
+  const clearResults = () => {
+    while (resultsBody.firstChild) {
+      resultsBody.removeChild(resultsBody.firstChild);
+    }
+    resultsBody.appendChild(emptyRow);
+  };
+
+  const renderResults = (items) => {
+    clearResults();
+    if (!items.length) {
+      emptyRow.style.display = '';
+      return;
+    }
+    emptyRow.style.display = 'none';
+    items.forEach((item) => {
+      const row = document.createElement('tr');
+      const providerCell = document.createElement('td');
+      providerCell.textContent = item.provider_name;
+      row.appendChild(providerCell);
+
+      const titleCell = document.createElement('td');
+      titleCell.textContent = item.title;
+      row.appendChild(titleCell);
+
+      const skuCell = document.createElement('td');
+      skuCell.textContent = item.sku || '';
+      row.appendChild(skuCell);
+
+      const universalCell = document.createElement('td');
+      universalCell.textContent = item.universal_code || '';
+      row.appendChild(universalCell);
+
+      const stockCell = document.createElement('td');
+      stockCell.textContent = String(item.stock ?? '');
+      row.appendChild(stockCell);
+
+      const priceCell = document.createElement('td');
+      priceCell.textContent = item.price !== null && item.price !== undefined ? `$${item.price}` : '';
+      row.appendChild(priceCell);
+
+      const actionCell = document.createElement('td');
+      const copyButton = document.createElement('button');
+      copyButton.type = 'button';
+      copyButton.textContent = 'Copiar';
+      copyButton.addEventListener('click', () => {
+        createTitle.value = item.title || '';
+        createSku.value = item.sku || '';
+        createUniversal.value = item.universal_code || '';
+        createDescription.value = item.description || '';
+        if (createForm) {
+          createForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (createSubmit) {
+          createSubmit.focus();
+        }
+      });
+      actionCell.appendChild(copyButton);
+      row.appendChild(actionCell);
+
+      resultsBody.appendChild(row);
+    });
+  };
+
+  const runSearch = () => {
+    const q = (searchInput.value || '').trim();
+    if (!q) {
+      renderResults([]);
+      return;
+    }
+    const params = new URLSearchParams({ q });
+    fetch(`/vendedor/api/provider_products_copy_search.php?${params.toString()}`, {
+      credentials: 'same-origin',
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        renderResults(Array.isArray(data.items) ? data.items : []);
+      })
+      .catch(() => {
+        renderResults([]);
+      });
+  };
+
+  searchButton.addEventListener('click', runSearch);
+  searchInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      runSearch();
+    }
+  });
+})();
+</script>";
 
 page_footer();

@@ -196,9 +196,19 @@ echo <<<JS
     return '$' + numberValue.toFixed(2);
   }
 
-  function renderResults(items) {
+  const emptyStateMessages = {
+    all_linked: 'No hay más productos disponibles para vincular. Todos los productos con stock ya están vinculados.',
+    no_results: 'Sin resultados para la búsqueda ingresada.'
+  };
+
+  function renderEmptyState(reason) {
+    const message = emptyStateMessages[reason] || emptyStateMessages.no_results;
+    resultsBox.innerHTML = "<div class='empty-state' style='padding:8px; color:#666;'>" + escapeHtml(message) + "</div>";
+  }
+
+  function renderResults(items, emptyReason) {
     if (!items.length) {
-      resultsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
+      renderEmptyState(emptyReason || 'no_results');
       return;
     }
     const rows = items.map(function(item) {
@@ -217,7 +227,10 @@ echo <<<JS
       "</table>";
   }
 
+  let lastQuery = '';
+
   function fetchResults(query) {
+    lastQuery = query;
     const params = new URLSearchParams({
       q: query,
       product_id: productId
@@ -228,7 +241,9 @@ echo <<<JS
       .then(function(res) { return res.json(); })
       .then(function(data) {
         if (Array.isArray(data)) {
-          renderResults(data);
+          renderResults(data, 'no_results');
+        } else if (data && Array.isArray(data.items)) {
+          renderResults(data.items, data.empty_reason);
         } else if (data && data.error) {
           setMessage(data.error);
         }
@@ -307,7 +322,11 @@ echo <<<JS
           rowEl.parentNode.removeChild(rowEl);
         }
         if (resultsBox.querySelectorAll('tbody tr, table tr[data-id]').length === 0) {
-          resultsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
+          if (lastQuery) {
+            fetchResults(lastQuery);
+          } else {
+            renderEmptyState('no_results');
+          }
         }
       })
       .catch(function(err) {
@@ -322,7 +341,7 @@ echo <<<JS
       const query = searchInput.value.trim();
       setMessage('');
       if (!query) {
-        resultsBox.innerHTML = "<div style='padding:8px; color:#666;'>Sin resultados</div>";
+        renderEmptyState('no_results');
         return;
       }
       fetchResults(query);

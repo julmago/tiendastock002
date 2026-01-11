@@ -39,17 +39,29 @@ function current_sell_price_details(PDO $pdo, array $store, array $sp): array {
   $autoPrice = $best ? ($base * $markupFactor) : 0.0;
   $manualPresent = price_value_present($sp['manual_price'] ?? null);
   $ownPresent = price_value_present($sp['own_stock_price'] ?? null);
+  $ownQty = (int)($sp['own_stock_qty'] ?? 0);
+  $linkedStock = provider_stock_sum($pdo, (int)$sp['id']);
+  $linkedHasStock = $linkedStock > 0;
 
   if ($manualPresent) {
     $priceCalculated = (float)$sp['manual_price'];
-  } elseif ($ownPresent) {
+    $priceSource = 'manual';
+  } elseif ($linkedHasStock) {
+    $priceCalculated = $autoPrice;
+    $priceSource = 'provider';
+  } elseif ($ownPresent && $ownQty > 0) {
     $priceCalculated = (float)$sp['own_stock_price'];
+    $priceSource = 'own';
   } else {
     $priceCalculated = $autoPrice;
+    $priceSource = 'provider';
   }
 
   $minAllowed = $base * 1.15;
-  $minApplied = ($minAllowed > 0.0 && $priceCalculated < $minAllowed);
+  $minApplied = false;
+  if ($priceSource === 'provider' && $minAllowed > 0.0 && $priceCalculated < $minAllowed) {
+    $minApplied = true;
+  }
   $finalPrice = $minApplied ? max($autoPrice, $minAllowed) : $priceCalculated;
 
   return [
@@ -57,7 +69,9 @@ function current_sell_price_details(PDO $pdo, array $store, array $sp): array {
     'min_applied' => $minApplied,
     'min_allowed' => $minAllowed,
     'auto_price' => $autoPrice,
-    'base_price' => $base
+    'base_price' => $base,
+    'price_source' => $priceSource,
+    'linked_stock' => $linkedStock
   ];
 }
 

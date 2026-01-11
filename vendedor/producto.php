@@ -82,14 +82,14 @@ $stockTotal = $provStock + (int)$product['own_stock_qty'];
 $sellTxt = ($sell>0) ? '$'.number_format($sell,2,',','.') : 'Sin stock';
 
 $linkedSt = $pdo->prepare("
-  SELECT pp.id, pp.title, pp.sku, p.display_name AS provider_name,
+  SELECT pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name AS provider_name,
          COALESCE(SUM(GREATEST(ws.qty_available - ws.qty_reserved,0)),0) AS stock
   FROM store_product_sources sps
   JOIN provider_products pp ON pp.id = sps.provider_product_id
   LEFT JOIN providers p ON p.id = pp.provider_id
   LEFT JOIN warehouse_stock ws ON ws.provider_product_id = pp.id
   WHERE sps.store_product_id = ? AND sps.enabled=1
-  GROUP BY pp.id, pp.title, pp.sku, p.display_name
+  GROUP BY pp.id, pp.title, pp.sku, pp.universal_code, pp.base_price, p.display_name
   ORDER BY pp.id DESC
 ");
 $linkedSt->execute([$productId]);
@@ -142,15 +142,18 @@ if (!$linkedProducts) {
   echo "<p id='linked-products-empty'>No hay productos vinculados a esta publicación.</p>";
 } else {
   echo "<table id='linked-products-table' border='1' cellpadding='6' cellspacing='0'>
-  <tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th><th>Acciones</th></tr>";
+  <tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr>";
   foreach($linkedProducts as $linked){
     $providerName = $linked['provider_name'] ?: '—';
+    $universalCode = $linked['universal_code'] ?: '—';
+    $price = $linked['base_price'] !== null ? '$'.number_format((float)$linked['base_price'], 2, ',', '.') : '—';
     echo "<tr>
-      <td>".h((string)$linked['id'])."</td>
+      <td>".h((string)$providerName)."</td>
       <td>".h((string)$linked['title'])."</td>
       <td>".h((string)($linked['sku'] ?? ''))."</td>
-      <td>".h((string)$providerName)."</td>
+      <td>".h((string)$universalCode)."</td>
       <td>".h((string)$linked['stock'])."</td>
+      <td>".h((string)$price)."</td>
       <td>
         <form method='post' style='margin:0' onsubmit='return confirm(\"¿Eliminar vínculo?\")'>
           <input type='hidden' name='csrf' value='".h(csrf_token())."'>
@@ -217,7 +220,7 @@ echo <<<JS
       table.setAttribute('cellpadding', '6');
       table.setAttribute('cellspacing', '0');
       table.style.width = '100%';
-      table.innerHTML = "<thead><tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Precio</th><th>Acciones</th></tr></thead><tbody></tbody>";
+      table.innerHTML = "<thead><tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr></thead><tbody></tbody>";
       resultsBox.appendChild(table);
     }
     return table;
@@ -267,7 +270,8 @@ echo <<<JS
         "<td>" + escapeHtml(item.provider_name || '—') + "</td>" +
         "<td>" + escapeHtml(item.title) + "</td>" +
         "<td>" + escapeHtml(item.sku || '') + "</td>" +
-        "<td>" + escapeHtml(item.universal_code || '') + "</td>" +
+        "<td>" + escapeHtml(item.universal_code || '—') + "</td>" +
+        "<td>" + escapeHtml(String(item.stock)) + "</td>" +
         "<td>" + escapeHtml(formatPrice(item.price)) + "</td>" +
         "<td><button type='button' class='provider-link-action'>Vincular</button></td>" +
         "</tr>";
@@ -312,16 +316,17 @@ echo <<<JS
       table.setAttribute('border', '1');
       table.setAttribute('cellpadding', '6');
       table.setAttribute('cellspacing', '0');
-      table.innerHTML = "<tr><th>ID</th><th>Título</th><th>SKU</th><th>Proveedor</th><th>Stock</th><th>Acciones</th></tr>";
+      table.innerHTML = "<tr><th>Proveedor</th><th>Título</th><th>SKU</th><th>Código universal</th><th>Stock</th><th>Precio</th><th>Acciones</th></tr>";
       resultsBox.insertAdjacentElement('afterend', table);
     }
     const row = document.createElement('tr');
     const providerName = item.provider_name || '—';
-    row.innerHTML = "<td>" + escapeHtml(String(item.id)) + "</td>" +
+    row.innerHTML = "<td>" + escapeHtml(providerName) + "</td>" +
       "<td>" + escapeHtml(item.title) + "</td>" +
       "<td>" + escapeHtml(item.sku || '') + "</td>" +
-      "<td>" + escapeHtml(providerName) + "</td>" +
+      "<td>" + escapeHtml(item.universal_code || '—') + "</td>" +
       "<td>" + escapeHtml(String(item.stock)) + "</td>" +
+      "<td>" + escapeHtml(formatPrice(item.price)) + "</td>" +
       "<td>" +
       "<form method='post' style='margin:0' onsubmit='return confirm(\"¿Eliminar vínculo?\")'>" +
       "<input type='hidden' name='csrf' value='" + escapeHtml(csrfToken) + "'>" +
